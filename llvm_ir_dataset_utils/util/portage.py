@@ -67,6 +67,7 @@ def portage_setup_compiler(build_dir):
     os.symlink('/etc/portage/make.profile', make_profile_path)
   get_portage_compiler_config(make_conf_path)
 
+
 def clean_binpkg(package_spec):
   pkgpath = ''
   if 'ruby' in os.uname().nodename:
