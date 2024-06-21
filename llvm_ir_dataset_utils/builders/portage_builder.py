@@ -56,6 +56,7 @@ def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
   build_log_path = os.path.join(corpus_dir, BUILD_LOG_NAME)
   try:
     with open(build_log_path, 'w') as build_log_file:
+      #print('uttst')
       subprocess.run(
           assembled_build_command,
           stdout=build_log_file,
@@ -72,10 +73,12 @@ def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
 def extract_ir(package_spec, corpus_dir, build_dir, threads):
   build_directory = build_dir + "/portage/"
   package_spec = package_spec + "*"
+  print(package_spec)
   match = glob.glob(os.path.join(build_directory, package_spec))
   assert(len(match) == 1)
   package_name_with_version = os.path.basename(match[0])
-  build_directory = match[0] + "/work/" + package_name_with_version
+  build_directory = match[0] + "/work"
+  print(build_directory)
   if build_directory is not None:
     objects = extract_ir_lib.load_from_directory(build_directory, corpus_dir)
     relative_output_paths = extract_ir_lib.run_extraction(

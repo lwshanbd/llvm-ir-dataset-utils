@@ -1,8 +1,7 @@
 {
   "sources": [],
-  "folder_name": "boost",
+  "folder_name": "b2",
   "build_system": "portage",
-  "package_name": "boost",
-  "package_spec": "dev-libs/boost",
-  "license": "GPL-3.0-only"
+  "package_name": "b2",
+  "package_spec": "dev-build/b2"
 }

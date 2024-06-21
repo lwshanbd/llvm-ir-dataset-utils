@@ -1,4 +1,4 @@
-#!/bin/python
+#!/usr/sbin/python
 """This script wraps the compiler, taking in the compiler options and saving
 the source files that are used within the compilation step."""
 
