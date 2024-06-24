@@ -6,7 +6,7 @@ import os
 def run_emerge_pretend(package_name):
     try:
         result = subprocess.run(
-            ['emerge', '-pv', package_name],
+            ['emerge', '-pv', '--autounmask-write=y', package_name],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -20,8 +20,7 @@ def run_emerge_pretend(package_name):
 def extract_package_names(output):
     pattern = re.compile(r'(\S+?/\S+?)(?=-\d)')
     matches = pattern.findall(output)
-    unique_packages = sorted(set(matches))
-    return unique_packages
+    return matches
 
 def create_json_file(package):
     category, name = package.split('/')
@@ -44,9 +43,9 @@ def create_json_file(package):
 def run_corpus_command(json_filename):
     command = [
         'python3', './llvm_ir_dataset_utils/tools/corpus_from_description.py',
-        '--source_dir=/p/lustre3/shan4/database/source',
-        '--corpus_dir=/p/lustre3/shan4/database/corpus',
-        '--build_dir=/p/lustre3/shan4/database/build',
+        '--source_dir=/data/database/source',
+        '--corpus_dir=/data/database/corpus',
+        '--build_dir=/data/database/build',
         f'--corpus_description={json_filename}'
     ]
     try:
@@ -56,21 +55,29 @@ def run_corpus_command(json_filename):
     except subprocess.CalledProcessError as e:
         print(f"Error running command for {json_filename}: {e}")
 
-def main():
-    package_name = 'dev-build/cmake'
+def build(package_name):
+    
     output = run_emerge_pretend(package_name)
+    print(output)
     if output:
         package_names = extract_package_names(output)
+        print(package_names)
         for package in package_names:
             name = package.split('/')[1]
-            package_path = '/p/lustre3/shan4/database/corpus/' + name
+            package_path = '/data/database/corpus/' + name
             if os.path.exists(package_path):
                 continue
             json_filename = create_json_file(package)
             run_corpus_command(json_filename)
 
 if __name__ == "__main__":
-    main()
+    with open('corpus_descriptions_test/tmp1.list', 'r') as file:
+        for i, package_name in enumerate(file):
+            if i >= 50:
+                break
+            package_name = package_name.strip()
+            build(package_name)
+            
 '''
 python ./llvm_ir_dataset_utils/tools/corpus_from_description.py \
   --source_dir=/p/lustre3/shan4/database/source \
@@ -83,4 +90,9 @@ python ./llvm_ir_dataset_utils/tools/corpus_from_description.py \
   --corpus_dir=/data/database/corpus \
   --build_dir=/data/database/build \
   --corpus_description=./corpus_descriptions_test/portage_hello.json
+
+['llvm-objcopy --dump-section=.llvmcmd=$DATA/database/corpus/yasm/yasm-1.3.0/genmacro.o.cmd $DATA/database/build/yasm-build/portage/dev-lang/yasm-1.3.0-r1/work/yasm-1.3.0/genmacro.o /dev/null']  
+
+['llvm-objcopy --dump-section=.llvmbc=$DATA/database/corpus/yasm/yasm-1.3.0/genmacro.o.cmd $DATA/database/build/yasm-build/portage/dev-lang/yasm-1.3.0-r1/work/yasm-1.3.0/genmacro.o /dev/null']  
+  
 '''

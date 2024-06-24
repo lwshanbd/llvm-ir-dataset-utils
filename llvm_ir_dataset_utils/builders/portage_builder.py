@@ -37,9 +37,10 @@ def generate_emerge_command(package_to_build, threads, build_dir):
       '--usepkg',  # Use binary packages if available
       '--binpkg-respect-use=y',  # Ensure that binary package installations respect USE flag settings
       '--quiet-build=y',  # Reduce output during the build process
+      '--autounmask-write=y',  # Automatically write unmasking changes to the configuration
       package_to_build  # The package to install
   ]
-
+  print(command_vector)
   # Portage does not support setting the build directory directly in the command,
   # but this can be controlled with the PORTAGE_TMPDIR environment variable
   # This environment variable needs to be set when calling subprocess, not here directly
@@ -87,8 +88,8 @@ def extract_ir(package_spec, corpus_dir, build_dir, threads):
     extract_source_lib.copy_source(build_directory, corpus_dir)
 
 
-def cleanup(package_name, package_spec, corpus_dir, uninstall=True):
-  #TODO: Implement cleanup
+def cleanup(build_dir):
+  shutil.rmtree(build_dir)
   return
 
 
@@ -127,9 +128,9 @@ def build_package(dependency_futures,
   if build_result:
     extract_ir(package_spec, corpus_dir, build_dir, threads)
     logging.warning(f'Finished building {package_name}')
-  if cleanup_build:
-    if build_result:
-      cleanup(package_name, package_spec, corpus_dir)
-    else:
-      cleanup(package_name, package_spec, corpus_dir, uninstall=False)
+    
+    #cleanup(build_dir)
+  # if cleanup_build:
+  #   if build_result:
+  #     cleanup(build_dir)
   return construct_build_log(build_result, package_name)
