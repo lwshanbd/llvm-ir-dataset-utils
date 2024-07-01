@@ -29,6 +29,7 @@ def generate_emerge_command(package_to_build, threads, build_dir):
       'emerge',  # Portage package management command
       '--jobs={}'.format(
           threads),  # Set the number of jobs for parallel building
+      '-v',  # Enable verbose output
       '--load-average={}'.format(
           threads),  # Set the maximum load average for parallel builds
       '--config-root={}'.format(
@@ -36,7 +37,6 @@ def generate_emerge_command(package_to_build, threads, build_dir):
       '--buildpkg',  # Build binary packages, similar to Spack's build cache
       '--usepkg',  # Use binary packages if available
       '--binpkg-respect-use=y',  # Ensure that binary package installations respect USE flag settings
-      '--quiet-build=y',  # Reduce output during the build process
       '--autounmask-write=y',  # Automatically write unmasking changes to the configuration
       package_to_build  # The package to install
   ]
@@ -46,13 +46,38 @@ def generate_emerge_command(package_to_build, threads, build_dir):
   # This environment variable needs to be set when calling subprocess, not here directly
   return command_vector
 
+def perform_build_again(package_name, assembled_build_command, corpus_dir, build_dir):
+  logging.info(f"Portage building package {package_name}")
+  environment = os.environ.copy()
+  # Set DISTDIR and PORTAGE_TMPDIR to set the build directory for Portage
+  #environment['DISTDIR'] = build_dir
+  #environment['PORTAGE_TMPDIR'] = build_dir
+  build_log_path = os.path.join(corpus_dir, BUILD_LOG_NAME)
+  try:
+    with open(build_log_path, 'w') as build_log_file:
+      print(assembled_build_command)
+      #print('uttst')
+      subprocess.run(
+          assembled_build_command,
+          stdout=build_log_file,
+          stderr=build_log_file,
+          check=True,
+          env=environment)
+  except subprocess.SubprocessError:
+    logging.warn(f"Failed AGAIN to build portage package {package_name}")
+    #cleanup(corpus_dir)
+    return False
+  logging.info(f"Finished build portage package {package_name}")
+  return True
 
+#['emerge -av --config-root=/data/database/build/sys-apps_dbus-build sys-apps/dbus']
 def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
   logging.info(f"Portage building package {package_name}")
   environment = os.environ.copy()
   # Set DISTDIR and PORTAGE_TMPDIR to set the build directory for Portage
   environment['DISTDIR'] = build_dir
   environment['PORTAGE_TMPDIR'] = build_dir
+  print(build_dir)
   build_log_path = os.path.join(corpus_dir, BUILD_LOG_NAME)
   try:
     with open(build_log_path, 'w') as build_log_file:
@@ -63,20 +88,31 @@ def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
           stderr=build_log_file,
           check=True,
           env=environment)
-  except subprocess.SubprocessError:
+  except subprocess.SubprocessError as e:
+    print(f"Error running emerge: {e.stderr}")
     logging.warn(f"Failed to build portage package {package_name}")
-    return False
+    update_command = ['etc-update', '--automode', '-5']
+    subprocess.run(update_command)
+    print(f"Error running emerge: {e.stderr}; Let's try again!")
+    #return False
+    return perform_build_again(package_name, assembled_build_command, corpus_dir, build_dir)
   logging.info(f"Finished build portage package {package_name}")
   return True
 
 
 def extract_ir(package_spec, corpus_dir, build_dir, threads):
+  use_tmp = False
   build_directory = build_dir + "/portage/"
   package_spec = package_spec + "*"
   print(package_spec)
   match = glob.glob(os.path.join(build_directory, package_spec))
+  if match == 0:
+    build_directory = "/var/tmp/portage/"
+    package_spec = package_spec + "*"
+    print(package_spec)
+    match = glob.glob(os.path.join(build_directory, package_spec))
+    use_tmp = True
   assert (len(match) == 1)
-  package_name_with_version = os.path.basename(match[0])
   build_directory = match[0] + "/work"
   print(build_directory)
   if build_directory is not None:
@@ -86,6 +122,8 @@ def extract_ir(package_spec, corpus_dir, build_dir, threads):
     extract_ir_lib.write_corpus_manifest(None, relative_output_paths,
                                          corpus_dir)
     extract_source_lib.copy_source(build_directory, corpus_dir)
+  if use_tmp:
+    shutil.rmtree(build_directory)
 
 
 def cleanup(build_dir):
@@ -129,7 +167,7 @@ def build_package(dependency_futures,
     extract_ir(package_spec, corpus_dir, build_dir, threads)
     logging.warning(f'Finished building {package_name}')
     
-    #cleanup(build_dir)
+    cleanup(build_dir)
   # if cleanup_build:
   #   if build_result:
   #     cleanup(build_dir)

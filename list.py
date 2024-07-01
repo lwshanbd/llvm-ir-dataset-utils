@@ -3,6 +3,22 @@ import re
 import json
 import os
 
+def run_emerge_pretend_again(package_name):
+    try:
+        result = subprocess.run(
+            ['emerge', '-pv', '--autounmask-write=y', package_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        update_command = ['etc-update', '--automode', '-5']
+        subprocess.run(update_command)
+        print(f"Error AGAIN!!!!! running emerge: {e.stderr}")
+        return None
+    
 def run_emerge_pretend(package_name):
     try:
         result = subprocess.run(
@@ -14,8 +30,17 @@ def run_emerge_pretend(package_name):
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
-        print(f"Error running emerge: {e.stderr}")
-        return None
+        subprocess.run(
+            ['emerge', '--autounmask-write=y', package_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False
+        )
+        update_command = ['etc-update', '--automode', '-5']
+        subprocess.run(update_command)
+        print(f"Error running emerge: {e.stderr}; Let's try again!")
+        return run_emerge_pretend_again(package_name)
 
 def extract_package_names(output):
     pattern = re.compile(r'(\S+?/\S+?)(?=-\d)')
@@ -23,16 +48,18 @@ def extract_package_names(output):
     return matches
 
 def create_json_file(package):
-    category, name = package.split('/')
+    _ , name = package.split('/')
+    name_with_slash = package.replace('/', '_')
+    print(name_with_slash)
     json_content = {
         "sources": [],
-        "folder_name": name,
+        "folder_name": name_with_slash,
         "build_system": "portage",
         "package_name": name,
         "package_spec": package
     }
 
-    json_filename = f"/data/database/json/portage_{name}.json"
+    json_filename = f"/data/database/json/portage_{name_with_slash}.json"
     os.makedirs(os.path.dirname(json_filename), exist_ok=True)
 
     with open(json_filename, 'w') as json_file:
@@ -58,22 +85,25 @@ def run_corpus_command(json_filename):
 def build(package_name):
     
     output = run_emerge_pretend(package_name)
-    print(output)
+    #print(output)
     if output:
         package_names = extract_package_names(output)
         print(package_names)
         for package in package_names:
-            name = package.split('/')[1]
-            package_path = '/data/database/corpus/' + name
+            name_with_slash = package.replace('/', '_')
+            package_path = '/data/database/corpus/' + name_with_slash
             if os.path.exists(package_path):
                 continue
             json_filename = create_json_file(package)
             run_corpus_command(json_filename)
 
 if __name__ == "__main__":
-    with open('corpus_descriptions_test/tmp1.list', 'r') as file:
+    #build('sys-apps/dbus')
+    with open('corpus_descriptions_test/pkg.list', 'r') as file:
         for i, package_name in enumerate(file):
-            if i >= 50:
+            if i < 50:
+                continue
+            if i >= 200:
                 break
             package_name = package_name.strip()
             build(package_name)

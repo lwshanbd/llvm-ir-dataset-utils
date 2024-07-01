@@ -43,7 +43,7 @@ def portage_setup_compiler(build_dir):
 
 
 def clean_binpkg(package_spec):
-  pkgpath = '/var/cache/binpkgs/' + package_spec
+  pkgpath = '/data/packages' + package_spec
   if os.path.exists(pkgpath):
     command_vector = ['rm', '-rf', pkgpath]
     subprocess.run(command_vector)
