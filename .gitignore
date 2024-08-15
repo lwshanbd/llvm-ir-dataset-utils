@@ -5,3 +5,6 @@ llvm_ir_dataset_utils.egg-info/
 *.tar
 *.sif
 *.swp
+*.err
+*.out
+*.sbatch

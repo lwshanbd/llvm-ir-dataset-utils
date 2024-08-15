@@ -19,6 +19,7 @@ def run_compiler_invocation(mode, compiler_arguments):
     command_vector.append('clang')
 
   command_vector.extend(compiler_arguments)
+  command_vector.append('-Wno-register')
 
   compiler_process = subprocess.run(command_vector)
 

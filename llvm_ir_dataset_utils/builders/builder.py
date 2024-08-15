@@ -210,10 +210,6 @@ def parse_and_build_from_description(
         cleanup,
     )
   elif corpus_description["build_system"] == "portage":
-    if "dependency_futures" in extra_builder_arguments:
-      dependency_futures = extra_builder_arguments["dependency_futures"]
-    else:
-      dependency_futures = []
     build_log = portage_builder.build_package(
         dependency_futures,
         corpus_description["package_name"],

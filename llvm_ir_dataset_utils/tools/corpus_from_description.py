@@ -54,8 +54,12 @@ def main(_):
         extra_builder_arguments=extra_builder_arguments,
         archive_corpus=FLAGS.archive_corpus)
     logging.info('Starting build.')
-    ray.get(build_future)
+    log = ray.get(build_future)
     logging.info('Build finished.')
+    if log['targets'][0]['success'] == False:
+        raise Exception("An error occurred in child program")
+        
+
 
 
 if __name__ == "__main__":

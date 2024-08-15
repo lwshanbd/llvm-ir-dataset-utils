@@ -2,7 +2,36 @@ import subprocess
 import re
 import json
 import os
+import sys
 
+
+def parse_emerge_output(output):
+    use_changes = re.findall(r'>=([^\s]+)\s+([^\n]+)', output)
+    use_changes = [(re.sub(r'-[0-9.]+(?:-r[0-9]+)?$', '', package), flags) for package, flags in use_changes]
+    print(use_changes)
+    return use_changes
+
+
+def update_package_use_custom(use_changes):
+    package_use_dir = '/etc/portage/package.use'
+    custom_file_path = os.path.join(package_use_dir, 'custom')
+    
+    if not os.path.exists(package_use_dir):
+        os.makedirs(package_use_dir)
+    
+    if not os.path.exists(custom_file_path):
+        open(custom_file_path, 'a').close()
+    
+    with open(custom_file_path, 'r+') as f:
+        content = f.read()
+        for package, flags in use_changes:
+            if package not in content:
+                f.write(f"{package} {flags}\n")
+                print(f"Added to {custom_file_path}: {package} {flags}")
+            else:
+                print(f"Package {package} already exists in {custom_file_path}")
+                
+                
 def run_emerge_pretend_again(package_name):
     try:
         result = subprocess.run(
@@ -30,6 +59,9 @@ def run_emerge_pretend(package_name):
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
+        if "have been masked." in e.stderr:
+            # print(f"Package {pkg} is masked.")
+            return 1
         subprocess.run(
             ['emerge', '--autounmask-write=y', package_name],
             stdout=subprocess.PIPE,
@@ -37,8 +69,12 @@ def run_emerge_pretend(package_name):
             text=True,
             check=False
         )
+        
         update_command = ['etc-update', '--automode', '-5']
         subprocess.run(update_command)
+        
+        use_changes = parse_emerge_output(e.stderr)
+        update_package_use_custom(use_changes)
         print(f"Error running emerge: {e.stderr}; Let's try again!")
         return run_emerge_pretend_again(package_name)
 
@@ -70,42 +106,82 @@ def create_json_file(package):
 def run_corpus_command(json_filename):
     command = [
         'python3', './llvm_ir_dataset_utils/tools/corpus_from_description.py',
-        '--source_dir=/data/database/source',
-        '--corpus_dir=/data/database/corpus',
-        '--build_dir=/data/database/build',
+        '--source_dir=/data/database-1/source',
+        '--corpus_dir=/data/database-1/corpus',
+        '--build_dir=/data/database-1/build',
         f'--corpus_description={json_filename}'
     ]
     try:
         print(command)
         subprocess.run(command, check=True)
-        print(f"Successfully ran command for {json_filename}")
+        return 0
     except subprocess.CalledProcessError as e:
         print(f"Error running command for {json_filename}: {e}")
+        return 1
 
-def build(package_name):
-    
-    output = run_emerge_pretend(package_name)
-    #print(output)
+def build(target_package):
+    installed_packages = []
+    with open('./portage-lists/finished.list', 'r') as installed_list:
+        for i in installed_list:
+            installed_packages.append(i[:-1])
+
+    output = run_emerge_pretend(target_package)
+    renew = False
+    if output == 1:
+        print(f"{target_package} has been masked")
+        return
     if output:
         package_names = extract_package_names(output)
-        print(package_names)
+        print(f"package_names: {package_names}")
         for package in package_names:
             name_with_slash = package.replace('/', '_')
-            package_path = '/data/database/corpus/' + name_with_slash
-            if os.path.exists(package_path):
+            if name_with_slash in installed_packages:
                 continue
+            if os.path.exists('/data/database-1/corpus/' + name_with_slash):
+               continue
             json_filename = create_json_file(package)
-            run_corpus_command(json_filename)
+            res = run_corpus_command(json_filename)
+            if res == 1 and package == target_package:
+                renew = True
+    if renew == True:
+        for package in package_names:
+            renew_command = ['emerge', '-v']
+            if package != target_package:
+                renew_command.append(package)
+                try:
+                    subprocess.run(renew_command, check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"Error to build depedency.")
+                    return
+                    
+                    
+            
+    
 
 if __name__ == "__main__":
-    #build('sys-apps/dbus')
-    with open('corpus_descriptions_test/pkg.list', 'r') as file:
+    package_name = 'net-p2p_retroshare'
+    package_name = package_name.replace('_','/',1)    
+    build(package_name)
+    if len(sys.argv) != 3:
+        print("Usage: python example.py <a> <b>")
+        sys.exit(0)
+
+    try:
+        a = int(sys.argv[1])
+        b = int(sys.argv[2])
+    except ValueError:
+        print("Please provide integer values for <a> and <b>.")
+        sys.exit(1)
+        
+    with open('./portage-lists/use.list', 'r') as file:
         for i, package_name in enumerate(file):
-            if i < 50:
+            if i < a:
                 continue
-            if i >= 200:
+            if i >= b:
                 break
             package_name = package_name.strip()
+            package_name = package_name.replace('_','/',1)
+            print(package_name)
             build(package_name)
             
 '''

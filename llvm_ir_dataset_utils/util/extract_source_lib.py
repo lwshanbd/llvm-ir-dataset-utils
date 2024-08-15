@@ -13,7 +13,11 @@ def copy_source(source_base_dir, output_dir):
   for source_extension in SOURCE_EXTENSIONS:
     for source_base_path in pathlib.Path(source_base_dir).glob(
         '**/*' + source_extension):
-      source_rel_path = os.path.relpath(source_base_path, start=source_base_dir)
-      destination_path = os.path.join(output_dir, source_rel_path)
-      os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-      shutil.copy(source_base_path, destination_path)
+      # Make sure the ".source" file is not a directory
+      if os.path.isfile(source_base_path):
+        source_rel_path = os.path.relpath(source_base_path, start=source_base_dir)
+        destination_path = os.path.join(output_dir, source_rel_path)
+        os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+        shutil.copy(source_base_path, destination_path)
+      else:
+        print(f"Skipped directory: {source_base_path}")
