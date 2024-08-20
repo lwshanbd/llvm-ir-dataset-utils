@@ -2619,7 +2619,6 @@ media-gfx_libimagequant
 kde-apps_kate-addons
 sys-fs_zerofree
 media-gfx_imagemagick
-dev-tex_catdvi
 app-crypt_scrypt
 app-text_docbook-xml-simple-dtd
 dev-tcltk_tcllib
@@ -3664,8 +3663,7 @@ sci-electronics_ngspice
 dev-java_checker-framework-qual
 dev-libs_ucl
 dev-qt_qttranslations
-net-libs_accounts-qml
-x11-plugins_pidgin-libnotify
+net-libs_accounts-qml111
 net-print_foomatic-db-engine
 dev-libs_jansson
 dev-python_cachecontrol

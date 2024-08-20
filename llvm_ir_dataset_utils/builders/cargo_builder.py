@@ -82,7 +82,7 @@ def build_package_future(source_dir, build_dir, corpus_dir, targets, threads,
                                                         cleanup)
 
 
-@ray.remote(num_cpus=multiprocessing.cpu_count())
+@ray.remote(num_cpus=1)
 def build_package(source_dir, build_dir, corpus_dir, targets, threads,
                   extra_env_variables, cleanup):
   build_log = []

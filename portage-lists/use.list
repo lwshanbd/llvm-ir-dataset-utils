@@ -65,7 +65,6 @@ dev-ada_aunit
 virtual_ooo
 dev-tex_ivritex
 kde-apps_ksystemlog
-x11-plugins_wmmaiload
 media-gfx_sane-frontends
 sci-visualization_ggobi
 dev-libs_weston
@@ -179,15 +178,12 @@ lxqt-base_lxqt-qtplugin
 kde-apps_dolphin-plugins-mercurial
 kde-apps_libkleo
 sci-electronics_xnecview
-kde-plasma_ksystemstats
 media-libs_sdl2-ttf
 dev-cpp_waylandpp
-x11-misc_xdg-user-dirs-gtk
 media-libs_ampache_browser
 app-i18n_kcm-fcitx
 media-radio_wsjtx
 app-i18n_fcitx
-x11-wm_awesome
 kde-plasma_plasma-welcome
 net-misc_qtm
 kde-frameworks_kidletime

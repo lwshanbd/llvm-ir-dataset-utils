@@ -83,7 +83,7 @@ def get_license_information(source_dir, corpus_dir):
   return license_file_list
 
 
-@ray.remote(num_cpus=multiprocessing.cpu_count())
+@ray.remote(num_cpus=4)
 def parse_and_build_from_description(
     corpus_description,
     source_base_dir,
@@ -210,6 +210,10 @@ def parse_and_build_from_description(
         cleanup,
     )
   elif corpus_description["build_system"] == "portage":
+    if "dependency_futures" in extra_builder_arguments:
+      dependency_futures = extra_builder_arguments["dependency_futures"]
+    else:
+      dependency_futures = []
     build_log = portage_builder.build_package(
         dependency_futures,
         corpus_description["package_name"],

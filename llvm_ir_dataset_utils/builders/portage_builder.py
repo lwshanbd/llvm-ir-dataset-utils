@@ -90,7 +90,7 @@ def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
     update_command = ['etc-update', '--automode', '-5']
     subprocess.run(update_command)
     print(f"Error running emerge: {e.stderr}; Let's try again!")
-    return False
+    # return False
     return perform_build_again(package_name, assembled_build_command, corpus_dir, build_dir)
   logging.info(f"Finished build portage package {package_name}")
   return True
@@ -166,6 +166,7 @@ def build_package(dependency_futures,
     logging.warning(f'Finished building {package_name}')
     
   try:
+    print("------cleaning-----")
     cleanup(build_dir)
   except Exception as e:
     pass

@@ -8,7 +8,7 @@ import os
 def get_portage_compiler_config(filename):
 
   content = (
-    'COMMON_FLAGS="-O2 -pipe -Xclang -fembed-bitcode=all -Wno-reserved-user-defined-literal -Wno-register -Wno-error -Wno-register"\n'
+    'COMMON_FLAGS="-O2 -pipe -Xclang -fembed-bitcode=all -Wno-implicit-function-declaration -Wno-reserved-user-defined-literal -Wno-register -Wno-error -Wno-register"\n'
     '\n'
     'CC="/data/ir-llvm/utils/compiler_wrapper"\n'
     'CXX="/data/ir-llvm/utils/compiler_wrapper++"\n'
