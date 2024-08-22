@@ -45,7 +45,9 @@ def generate_emerge_command(package_to_build, threads, build_dir):
   # This environment variable needs to be set when calling subprocess, not here directly
   return command_vector
 
-def perform_build_again(package_name, assembled_build_command, corpus_dir, build_dir):
+
+def perform_build_again(package_name, assembled_build_command, corpus_dir,
+                        build_dir):
   logging.info(f"Portage building package {package_name}")
   environment = os.environ.copy()
   build_log_path = os.path.join(corpus_dir, BUILD_LOG_NAME)
@@ -84,7 +86,8 @@ def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
     logging.warn(f"Failed to build portage package {package_name}")
     update_command = ['etc-update', '--automode', '-5']
     subprocess.run(update_command)
-    return perform_build_again(package_name, assembled_build_command, corpus_dir, build_dir)
+    return perform_build_again(package_name, assembled_build_command,
+                               corpus_dir, build_dir)
   logging.info(f"Finished build portage package {package_name}")
   return True
 
@@ -100,7 +103,7 @@ def extract_ir(package_spec, corpus_dir, build_dir, threads):
                                          corpus_dir)
     extract_source_lib.copy_source(build_directory, corpus_dir)
     return
-  
+
   # Using the tmp directory
   build_directory = "/var/tmp/portage/"
   package_spec = package_spec + "*"
@@ -157,11 +160,10 @@ def build_package(dependency_futures,
   if build_result:
     extract_ir(package_spec, corpus_dir, build_dir, threads)
     logging.warning(f'Finished building {package_name}')
-    
+
   try:
     cleanup(build_dir)
   except Exception:
     pass
-
 
   return construct_build_log(build_result, package_name)
