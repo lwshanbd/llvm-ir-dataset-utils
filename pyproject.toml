@@ -45,6 +45,7 @@ ignore = ["F401", "E731"]
 
 [tool.codespell]
 ignore-words-list = "crate,"
+skip = "*.list"
 
 [build-system]
 requires = ["poetry-core"]

@@ -142,7 +142,7 @@ def build(target_package):
         try:
           subprocess.run(renew_command, check=True)
         except subprocess.CalledProcessError:
-          print("Error to build depedency.")
+          print("Error to build dependency.")
         continue
       json_filename = create_json_file(package)
       run_corpus_command(json_filename)

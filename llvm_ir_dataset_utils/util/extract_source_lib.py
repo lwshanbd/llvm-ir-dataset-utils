@@ -15,7 +15,8 @@ def copy_source(source_base_dir, output_dir):
         '**/*' + source_extension):
       # Make sure the ".source" file is not a directory
       if os.path.isfile(source_base_path):
-        source_rel_path = os.path.relpath(source_base_path, start=source_base_dir)
+        source_rel_path = os.path.relpath(
+            source_base_path, start=source_base_dir)
         destination_path = os.path.join(output_dir, source_rel_path)
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
         shutil.copy(source_base_path, destination_path)
