@@ -36,7 +36,7 @@ def generate_emerge_command(package_to_build, threads, build_dir):
       '--buildpkg',  # Build binary packages, similar to Spack's build cache
       '--usepkg',  # Use binary packages if available
       '--binpkg-respect-use=y',  # Ensure that binary package installations respect USE flag settings
-      '--quiet-build=y',  # Reduce output during the build process
+      '--autounmask-write=y',  # Automatically write unmasking changes to the configuration
       package_to_build  # The package to install
   ]
 
@@ -44,6 +44,25 @@ def generate_emerge_command(package_to_build, threads, build_dir):
   # but this can be controlled with the PORTAGE_TMPDIR environment variable
   # This environment variable needs to be set when calling subprocess, not here directly
   return command_vector
+
+def perform_build_again(package_name, assembled_build_command, corpus_dir, build_dir):
+  logging.info(f"Portage building package {package_name}")
+  environment = os.environ.copy()
+  build_log_path = os.path.join(corpus_dir, BUILD_LOG_NAME)
+  try:
+    with open(build_log_path, 'w') as build_log_file:
+      subprocess.run(
+          assembled_build_command,
+          stdout=build_log_file,
+          stderr=build_log_file,
+          check=True,
+          env=environment)
+  except subprocess.SubprocessError:
+    logging.warn(f"Failed AGAIN to build portage package {package_name}")
+    #cleanup(corpus_dir)
+    return False
+  logging.info(f"Finished build portage package {package_name}")
+  return True
 
 
 def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
@@ -61,20 +80,32 @@ def perform_build(package_name, assembled_build_command, corpus_dir, build_dir):
           stderr=build_log_file,
           check=True,
           env=environment)
-  except subprocess.SubprocessError:
+  except subprocess.CalledProcessError:
     logging.warn(f"Failed to build portage package {package_name}")
-    return False
+    update_command = ['etc-update', '--automode', '-5']
+    subprocess.run(update_command)
+    return perform_build_again(package_name, assembled_build_command, corpus_dir, build_dir)
   logging.info(f"Finished build portage package {package_name}")
   return True
 
 
 def extract_ir(package_spec, corpus_dir, build_dir, threads):
+  # Not using the tmp directory
   build_directory = build_dir + "/portage/"
+  if os.path.exists(build_directory):
+    objects = extract_ir_lib.load_from_directory(build_directory, corpus_dir)
+    relative_output_paths = extract_ir_lib.run_extraction(
+        objects, threads, "llvm-objcopy", None, None, ".llvmcmd", ".llvmbc")
+    extract_ir_lib.write_corpus_manifest(None, relative_output_paths,
+                                         corpus_dir)
+    extract_source_lib.copy_source(build_directory, corpus_dir)
+    return
+  
+  # Using the tmp directory
+  build_directory = "/var/tmp/portage/"
   package_spec = package_spec + "*"
   match = glob.glob(os.path.join(build_directory, package_spec))
-  assert (len(match) == 1)
-  package_name_with_version = os.path.basename(match[0])
-  build_directory = match[0] + "/work/" + package_name_with_version
+  build_directory = match[0] + "/work"
   if build_directory is not None:
     objects = extract_ir_lib.load_from_directory(build_directory, corpus_dir)
     relative_output_paths = extract_ir_lib.run_extraction(
@@ -82,10 +113,11 @@ def extract_ir(package_spec, corpus_dir, build_dir, threads):
     extract_ir_lib.write_corpus_manifest(None, relative_output_paths,
                                          corpus_dir)
     extract_source_lib.copy_source(build_directory, corpus_dir)
+    shutil.rmtree(build_directory)
 
 
-def cleanup(package_name, package_spec, corpus_dir, uninstall=True):
-  #TODO: Implement cleanup
+def cleanup(build_dir):
+  shutil.rmtree(build_dir)
   return
 
 
@@ -108,13 +140,14 @@ def build_package(dependency_futures,
                   build_dir,
                   cleanup_build=False):
   dependency_futures = ray.get(dependency_futures)
+  #build_backup = build_dir.copy()
   for dependency_future in dependency_futures:
     if not dependency_future['targets'][0]['success']:
       logging.warning(
           f"Dependency {dependency_future['targets'][0]['name']} failed to build "
           f"for package {package_name}, not building.")
-      if cleanup_build:
-        cleanup(package_name, package_spec, corpus_dir, uninstall=False)
+      #if cleanup_build:
+      #  cleanup(package_name, package_spec, corpus_dir, uninstall=False)
       return construct_build_log(False, package_name, None)
   portage_utils.portage_setup_compiler(build_dir)
   portage_utils.clean_binpkg(package_spec)
@@ -124,9 +157,11 @@ def build_package(dependency_futures,
   if build_result:
     extract_ir(package_spec, corpus_dir, build_dir, threads)
     logging.warning(f'Finished building {package_name}')
-  if cleanup_build:
-    if build_result:
-      cleanup(package_name, package_spec, corpus_dir)
-    else:
-      cleanup(package_name, package_spec, corpus_dir, uninstall=False)
+    
+  try:
+    cleanup(build_dir)
+  except Exception:
+    pass
+
+
   return construct_build_log(build_result, package_name)

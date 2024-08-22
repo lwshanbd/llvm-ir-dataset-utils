@@ -29,7 +29,6 @@ def process_build_log(build_log_path):
                                                      path_parts[1])
     corpus_name = os.path.basename(path_parts[0])[:-4]
     output_file_path = os.path.join(FLAGS.output_dir, f'{corpus_name}.log')
-    print(output_file_path)
     with open(output_file_path, 'wb') as output_file:
       output_file.write(build_log)
   else:

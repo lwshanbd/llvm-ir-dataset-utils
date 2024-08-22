@@ -93,3 +93,9 @@ The package contains a number of builders to target the LLVM-based languages, an
 - Cmake
 - Julia packages
 - Swift packages
+
+## Special Use of Portage(Gentoo OS) Builder
+
+Unlike the above builders, Portage-related builders must be built in a Gentoo or Gentoo container.
+
+If you are using a Gentoo container, please use `-v`(docker or podman) to map the host path where you want to store the data as `/data`.
