@@ -1,80 +1,115 @@
+"""Generate a Portage package list of C/C++ packages for corpus building.
+
+Scans a Portage ebuild repository and selects packages that (a) look like they
+build C/C++/native code and (b) are keyworded for amd64. The result is one
+``category/package`` atom per line, suitable for feeding into
+``portage_list_build.py``.
+
+Because the repository is scanned live, category moves are handled for free:
+a package that moved (for example ``sys-devel/llvm`` -> ``llvm-core/llvm``)
+appears under its current name.
+
+Example:
+
+  python3 llvm_ir_dataset_utils/tools/portage_extract_packages.py \\
+      --repo=/var/db/repos/gentoo \\
+      --output=corpus_descriptions_test/portage_pkg.list \\
+      --keywords=stable-testing
+"""
+
+import argparse
 import os
 
-packages = []
+# Top-level entries in a Portage repository that are not package categories.
+NON_PACKAGE_DIRS = {
+    'metadata', 'profiles', 'eclass', 'licenses', 'scripts', 'distfiles',
+    'virtual', '.git'
+}
+
+# Markers in an ebuild that indicate it compiles C/C++/native code. This is a
+# heuristic: it favours recall (build systems and toolchain usage) over
+# precision. Non-native packages that slip through simply extract no bitcode and
+# are recorded as failed builds downstream.
+CPP_MARKERS = ('cmake', 'emake', 'meson', 'CFLAGS', 'CXXFLAGS')
 
 
-def get_packages(parent_directory):
-  valid_dirs_count = 0
-  for first_level_subdir in os.listdir(parent_directory):
-    first_level_path = os.path.join(parent_directory, first_level_subdir)
-    if os.path.isdir(first_level_path):
-      for second_level_subdir in os.listdir(first_level_path):
-        second_level_path = os.path.join(first_level_path, second_level_subdir)
-        if os.path.isdir(second_level_path):
-          files = os.listdir(second_level_path)
-          if any(file.endswith('.ebuild') for file in files):
-            valid_dirs_count += 1
-            packages.append(second_level_path[2:])
-
-
-def processEbuild_cpp(file):
-  with open(file, 'r', encoding='utf-8') as f:
-    for line in f:
-      if "toolchain-funcs" in line and "inherit" in line:
+def ebuild_is_cpp(ebuild_path):
+  with open(ebuild_path, encoding='utf-8', errors='ignore') as ebuild:
+    for line in ebuild:
+      if 'inherit' in line and 'toolchain-funcs' in line:
         return True
-      elif "cmake" in line:
+      if 'toolchain' in line:
         return True
-      elif "emake" in line:
-        return True
-      elif "CFLAGS" in line:
-        return True
-      elif "CXXFLAGS" in line:
-        return True
-      elif "toolchain" in line:
-        return True
-      elif "meson" in line:
+      if any(marker in line for marker in CPP_MARKERS):
         return True
   return False
 
 
-def processEbuild_trunk(file):
-  with open(file, 'r', encoding='utf-8') as f:
-    for line in f:
-      if "KEYWORDS" in line and "amd64 " in line and "~amd64 " not in line:
-        return True
-  return False
+def ebuild_amd64_keyword(ebuild_path):
+  """Return (stable, testing) for the ebuild's amd64 KEYWORDS entry.
+
+  Tokens are matched exactly so ``amd64`` (stable) and ``~amd64`` (testing) are
+  distinguished from each other and from unrelated keywords such as
+  ``amd64-linux`` or a hard-masked ``-amd64``.
+  """
+  stable = testing = False
+  with open(ebuild_path, encoding='utf-8', errors='ignore') as ebuild:
+    for line in ebuild:
+      if 'KEYWORDS=' not in line:
+        continue
+      for token in line.replace('"', ' ').replace("'", ' ').split():
+        if token == 'amd64':
+          stable = True
+        elif token == '~amd64':
+          testing = True
+  return stable, testing
 
 
-def readpackage(package):
-  files = os.listdir(package)
-  for file in files:
-    if file.endswith('.ebuild'):
-      with open(os.path.join(package, file), 'r', encoding='utf-8') as f:
-        for line in f:
-          print(line[:-1])
-      return
+def find_packages(repo, accept_testing):
+  packages = []
+  for category in sorted(os.listdir(repo)):
+    category_path = os.path.join(repo, category)
+    if category in NON_PACKAGE_DIRS or not os.path.isdir(category_path):
+      continue
+    for package in sorted(os.listdir(category_path)):
+      package_path = os.path.join(category_path, package)
+      if not os.path.isdir(package_path):
+        continue
+      for entry in os.listdir(package_path):
+        if not entry.endswith('.ebuild'):
+          continue
+        ebuild_path = os.path.join(package_path, entry)
+        if not ebuild_is_cpp(ebuild_path):
+          continue
+        stable, testing = ebuild_amd64_keyword(ebuild_path)
+        if stable or (accept_testing and testing):
+          packages.append(f'{category}/{package}')
+          break
+  return sorted(set(packages))
 
 
 def main():
-  ebuild_directory = "./"
-  get_packages(ebuild_directory)
-  cpp_pkgs = []
-  for pkg in packages:
-    files = os.listdir(pkg)
-    for file in files:
-      if file.endswith('.ebuild'):
-        if processEbuild_trunk(os.path.join(pkg, file)):
-          if processEbuild_cpp(os.path.join(pkg, file)):
-            cpp_pkgs.append(pkg)
-            continue
+  parser = argparse.ArgumentParser(
+      description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser.add_argument(
+      '--repo',
+      default='/var/db/repos/gentoo',
+      help='Path to the Portage ebuild repository.')
+  parser.add_argument(
+      '--output', required=True, help='Path to write the package list to.')
+  parser.add_argument(
+      '--keywords',
+      choices=('stable', 'stable-testing'),
+      default='stable-testing',
+      help="'stable' keeps only amd64-stable packages; 'stable-testing' also "
+      'includes ~amd64 (more coverage, less reliable builds).')
+  args = parser.parse_args()
 
-  cpp_pkgs = list(set(cpp_pkgs))
-  with open(
-      "../../corpus_descriptions_test/portage_pkg.list", 'w',
-      encoding='utf-8') as f:
-    for i in cpp_pkgs:
-      f.write(i + "\n")
+  packages = find_packages(args.repo, args.keywords == 'stable-testing')
+  with open(args.output, 'w', encoding='utf-8') as output_file:
+    output_file.write('\n'.join(packages) + '\n')
+  print(f'Wrote {len(packages)} packages to {args.output}')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   main()
