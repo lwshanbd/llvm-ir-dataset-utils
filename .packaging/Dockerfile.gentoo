@@ -1,0 +1,86 @@
+FROM gentoo/stage3
+
+ARG CUSTOM_CERT
+
+# Portage installs build dependencies and the requested package into the
+# container's root filesystem, so the sandbox and privilege-drop features that
+# assume a pristine build host are disabled here. The container itself is the
+# isolation boundary (see gentoo-cpp.md).
+RUN echo 'FEATURES="-ipc-sandbox -network-sandbox -pid-sandbox -sandbox -usersandbox -usersync -userfetch -userpriv"' >> /etc/portage/make.conf
+
+# Set up a custom certificate/SSL settings depending upon build arguments.
+# Include README.md here so that the build doesn't fail if there is no custom
+# certificate specified. Then we just delete it afterwards.
+COPY README.md $CUSTOM_CERT /usr/local/share/ca-certificates/
+RUN rm /usr/local/share/ca-certificates/README.md \
+    && update-ca-certificates
+
+# Sync the Portage tree. Kept as its own layer so it is cached independently of
+# the slower @world update and toolchain build below.
+RUN emerge-webrsync --no-pgp-verify
+
+# Bring @world up to date against the freshly synced tree.
+RUN emerge --update --deep --newuse @world
+
+# Install the toolchain plus the utilities the corpus builder relies on. Atoms
+# are fully qualified: in current Gentoo `clang` lives at llvm-core/clang (a bare
+# `clang` is ambiguous with dev-python/clang-python), and cmake/ninja live under
+# dev-build. This is the slowest layer (LLVM/clang from source); keeping it on its
+# own means later additions do not trigger a recompile.
+RUN emerge \
+    app-portage/gentoolkit \
+    dev-vcs/git \
+    app-admin/sudo \
+    app-editors/vim \
+    app-eselect/eselect-python \
+    dev-python/pip \
+    dev-build/cmake \
+    dev-build/ninja \
+    llvm-core/clang
+
+# Additional Python slot needed to run the project (it requires >=3.9,<3.11).
+# Installed after the toolchain layer so it does not force an LLVM rebuild. The
+# system Python is left untouched so Portage keeps working on its own interpreter.
+RUN emerge dev-lang/python:3.10
+
+# Point the Portage binary-package cache at the persistent /data mount. Set in
+# make.conf (rather than only in a shell profile) so emerge honours it even for
+# non-interactive invocations.
+RUN echo 'PKGDIR="/data/packages"' >> /etc/portage/make.conf
+
+# Expose the installed LLVM toolchain for interactive shells. The slot is detected
+# from the just-emerged clang rather than hardcoded, so the image tracks whatever
+# version Gentoo ships. (clang is already on the system PATH via /etc/env.d for
+# Portage's own build environment; these exports are convenience for interactive
+# use.)
+RUN LLVM_PATH="$(ls -d /usr/lib/llvm/*/ | sort -V | tail -n1)" \
+    && LLVM_PATH="${LLVM_PATH%/}" \
+    && echo "export LLVM_PATH=\"${LLVM_PATH}\"" >> ~/.bashrc \
+    && echo 'export PATH="${PATH}:${LLVM_PATH}/bin"' >> ~/.bashrc \
+    && echo 'export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${LLVM_PATH}/lib:${LLVM_PATH}/lib64"' >> ~/.bashrc \
+    && echo 'export MANPATH="${MANPATH}:${LLVM_PATH}/share/man"' >> ~/.bashrc
+
+# Install the project into an isolated Python 3.10 virtualenv so it satisfies the
+# >=3.9,<3.11 constraint without disturbing the system interpreter Portage uses.
+# Dependencies come from Pipfile.lock, not pyproject.toml: the runtime code imports
+# `mlgo` (provided by mlgo-utils, which the Pipfile pins), whereas pyproject.toml
+# lists the unrelated, heavier ml-compiler-opt package that does not provide it.
+# The project package itself is installed editable with --no-deps against the same
+# path used for the runtime bind mount in gentoo-cpp.md, so mounting a working copy
+# there transparently overrides the baked-in code. setuptools is pinned <81 because
+# the locked Ray still imports pkg_resources, which newer setuptools no longer ships.
+# The venv is auto-activated for interactive shells.
+COPY . /workspace/llvm-ir-dataset-utils
+RUN python3.10 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip pipenv \
+    && cd /workspace/llvm-ir-dataset-utils \
+    && /opt/venv/bin/pipenv requirements --dev > /tmp/requirements.txt \
+    && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
+    && /opt/venv/bin/pip install --no-cache-dir --no-deps -e /workspace/llvm-ir-dataset-utils \
+    && /opt/venv/bin/pip install --no-cache-dir "setuptools<81" \
+    && rm /tmp/requirements.txt \
+    && echo 'source /opt/venv/bin/activate' >> ~/.bashrc
+
+WORKDIR /workspace/llvm-ir-dataset-utils
+
+CMD ["/bin/bash"]
