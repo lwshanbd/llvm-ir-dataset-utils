@@ -29,11 +29,22 @@ command -v llvm-objcopy
 python3 --version
 ```
 
-From the repository root, install the project in editable mode:
+The easiest way to satisfy all of the above is to build the provided image,
+which bakes in clang/LLVM, an isolated Python 3.10 virtualenv with the project
+and its dependencies already installed, and a synced Portage tree:
 
 ```bash
-python3 -m pip install -e .
+docker build -t llvm-ir-dataset-utils-gentoo -f ./.packaging/Dockerfile.gentoo .
+# podman build ... works identically
 ```
+
+`.packaging/Dockerfile.gentoo` is the authoritative record of what the
+environment needs; read it if you set an environment up by hand. Two things to
+know if you do install manually: pull the Python dependencies from `Pipfile`
+(which pins `mlgo-utils`, the package that provides the `mlgo` module the tools
+import) rather than with `pip install -e .` — `pyproject.toml` currently lists
+the wrong dependency, so an editable install leaves `mlgo` unimportable — and
+pin `setuptools<81`, since the locked Ray still imports `pkg_resources`.
 
 The checked-in compiler wrapper entry points are regular executable files. No
 symlink setup or fixed checkout path is required.
@@ -72,26 +83,24 @@ performed only for invocations with an explicit output option.
 
 ## Container mounts
 
-Use an existing Gentoo image that already has the prerequisites above. Mount
-both the repository and a persistent data directory into the container:
+Run the image built above, mounting a persistent data directory for the corpus:
 
 ```bash
 mkdir -p gentoo-data
 
 docker run --rm -it \
-  -v "$PWD":/workspace/llvm-ir-dataset-utils \
   -v "$PWD/gentoo-data":/data \
-  -w /workspace/llvm-ir-dataset-utils \
-  <prepared-gentoo-image> \
+  llvm-ir-dataset-utils-gentoo \
   /bin/bash
 ```
 
-Podman accepts the same mount layout. The repository mount must remain visible
-for the whole build because Portage invokes the wrappers from that checkout.
-
-The official `gentoo/stage3` and `gentoo/portage` images can be used to prepare
-such an image, but the current project still requires Python 3.9 or 3.10. Do not
-assume that a newly published stage3 image contains a compatible Python slot.
+Podman accepts the same mount layout. The image ships the repository at
+`/workspace/llvm-ir-dataset-utils` and, in interactive shells, auto-activates the
+Python 3.10 virtualenv and puts `clang`, `clang++`, and `llvm-objcopy` on `PATH`,
+so the commands below run as written. To iterate on the tools without rebuilding
+the image, additionally mount your checkout over that path:
+`-v "$PWD":/workspace/llvm-ir-dataset-utils` (Portage invokes the wrappers from
+there, so the mount must stay visible for the whole build).
 
 ## Corpus description
 
